@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Ayaka Mikazuki"
+            }
+        ],
+        "Category": "Date and Time",
+        "Description": "Compact, configurable clocks for multiple time zones",
+        "EnabledByDefault": true,
+        "FormFactors": [
+            "desktop"
+        ],
+        "Icon": "preferences-system-time",
+        "Id": "local.labeledtimezoneclock",
+        "License": "GPL-2.0-or-later",
+        "Name": "Labeled Time Zone Clocks",
+        "Version": "1.1.1"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
