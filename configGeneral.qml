@@ -36,42 +36,38 @@ KCMUtils.SimpleKCM {
         }
     }
 
+    // Mirrors parseClockEntries() in main.qml, so that both show the same clocks.
     function normaliseEntries(value): var {
+        const result = [];
         if (!Array.isArray(value)) {
-            throw new Error(i18n("The configuration must be a JSON array."));
-        }
-        if (value.length < 1) {
-            throw new Error(i18n("At least one clock is required."));
-        }
-        if (value.length > 32) {
-            throw new Error(i18n("A maximum of 32 clocks is supported."));
+            return result;
         }
 
-        const result = [];
-        for (let index = 0; index < value.length; index++) {
+        for (let index = 0; index < value.length && index < 32; index++) {
             const entry = value[index];
             if (entry === null || typeof entry !== "object") {
-                throw new Error(i18n("Clock %1 is not an object.", index + 1));
+                continue;
             }
 
             const label = typeof entry.label === "string" ? entry.label.trim() : "";
             const timeZone = typeof entry.timeZone === "string" ? entry.timeZone.trim() : "";
-            if (timeZone.length === 0) {
-                throw new Error(i18n("Clock %1 does not have a time zone.", index + 1));
+            if (timeZone.length > 0) {
+                result.push({
+                    "label": label,
+                    "timeZone": timeZone
+                });
             }
-            result.push({
-                "label": label,
-                "timeZone": timeZone
-            });
         }
         return result;
     }
 
     function loadModel(jsonText: string): void {
-        let entries;
+        let entries = [];
         try {
             entries = normaliseEntries(JSON.parse(jsonText));
         } catch (error) {
+        }
+        if (entries.length === 0) {
             entries = [{"label": "Local", "timeZone": "Local"}];
         }
 
@@ -132,7 +128,15 @@ KCMUtils.SimpleKCM {
     }
 
     function selectTimeZone(timeZone: string): void {
-        if (editingClockIndex < 0 || editingClockIndex >= clockModel.count) {
+        if (editingClockIndex < 0 || editingClockIndex > clockModel.count) {
+            return;
+        }
+
+        // An index one past the end means that a new clock is being added.
+        if (editingClockIndex === clockModel.count) {
+            clockModel.append({"label": suggestedLabel(timeZone), "timeZone": timeZone});
+            saveModel();
+            timeZoneDialog.close();
             return;
         }
 
@@ -254,7 +258,7 @@ KCMUtils.SimpleKCM {
                         Layout.fillWidth: true
                         visible: clockCard.timeZone.trim().length === 0 || !validatorClock.valid
                         type: Kirigami.MessageType.Error
-                        text: i18n("Enter a valid time zone such as Europe/London, America/Los_Angeles, Asia/Hong_Kong, or Local.")
+                        text: i18n("This time zone is not available on this system. Choose another one.")
                     }
                 }
             }
@@ -264,11 +268,7 @@ KCMUtils.SimpleKCM {
             text: i18n("Add clock")
             icon.name: "list-add"
             enabled: clockModel.count < 32
-            onClicked: {
-                clockModel.append({"label": "UTC", "timeZone": "UTC"});
-                page.saveModel();
-                Qt.callLater(() => page.openTimeZoneDialog(clockModel.count - 1));
-            }
+            onClicked: page.openTimeZoneDialog(clockModel.count)
         }
 
         Kirigami.Separator {

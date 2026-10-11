@@ -7,11 +7,14 @@ Labeled Time Zone Clocks is a multi-time-zone clock widget for KDE Plasma 6 pane
 - Add, remove, and reorder up to 32 clocks
 - Assign a custom label and standard IANA time zone to each clock
 - Handle daylight saving time automatically
+- Click the clocks to open a month calendar, with previous/next month navigation and a Today button
 - Use the regional default, 24-hour, or 12-hour time format
 - Configure everything through the standard Plasma widget settings interface
 - Install, upgrade, and remove the widget with the Arch Linux package manager
 
 A newly added widget initially displays only the local time.
+
+Left-click any clock to open or close the calendar. Use its left and right arrows to browse months, or **Today** to return to the current month. Each time you reopen the calendar it shows the current month in the system time zone. Clicking outside the popup or pressing **Esc** closes it. The widget behaves the same way when placed on the desktop. The calendar does not show holidays or events.
 
 ## Installation
 
@@ -62,4 +65,4 @@ Pacman will remove the packaged files. No additional cleanup is required because
 
 ## Compatibility
 
-The widget targets KDE Plasma 6 and was developed against the `org.kde.plasma.clock` interface provided by Plasma 6.7. It does not access external network services or execute shell commands.
+The widget requires KDE Plasma 6.7 or later; it was developed and tested against the `org.kde.plasma.clock` interface provided by Plasma 6.7. It does not access external network services or execute shell commands.

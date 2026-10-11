@@ -13,6 +13,7 @@ import org.kde.plasma.clock
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
+import org.kde.plasma.workspace.calendar as PlasmaCalendar
 
 PlasmoidItem {
     id: root
@@ -25,9 +26,8 @@ PlasmoidItem {
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     Plasmoid.title: i18n("Labeled Time Zone Clocks")
 
-    preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar
-        ? fullRepresentation
-        : compactRepresentation
+    preferredRepresentation: compactRepresentation
+    hideOnWindowDeactivate: true
 
     readonly property var clockEntries: parseClockEntries(Plasmoid.configuration.clocksJson)
 
@@ -62,14 +62,15 @@ PlasmoidItem {
         }
     }
 
-    function timeFormat(): string {
+    readonly property string timeFormat: {
         const regionalFormat = Qt.locale().timeFormat(Locale.ShortFormat);
         const match = /(hh*)(.+?)(mm)/i.exec(regionalFormat);
+        const amPmMatch = /ap/i.exec(regionalFormat);
 
         let hourToken = match ? match[1].toLowerCase() : "hh";
         const delimiter = match ? match[2] : ":";
         const minuteToken = match ? match[3] : "mm";
-        let showAmPm = regionalFormat.toLowerCase().includes("ap");
+        let showAmPm = amPmMatch !== null;
 
         if (Plasmoid.configuration.hourFormat === 1) {
             hourToken = "hh";
@@ -83,13 +84,22 @@ PlasmoidItem {
         if (Plasmoid.configuration.showSeconds) {
             result += delimiter + "ss";
         }
-        if (showAmPm) {
-            result += " AP";
+        if (!showAmPm) {
+            return result;
         }
-        return result;
+        if (!match || !amPmMatch) {
+            return result + " AP";
+        }
+
+        // Keep the AM/PM marker on the side where the regional format puts it.
+        const amPmEnd = amPmMatch.index + amPmMatch[0].length;
+        if (amPmMatch.index < match.index) {
+            return amPmMatch[0] + regionalFormat.slice(amPmEnd, match.index) + result;
+        }
+        return result + regionalFormat.slice(match.index + match[0].length, amPmMatch.index) + amPmMatch[0];
     }
 
-    component ClockView: MouseArea {
+    compactRepresentation: MouseArea {
         id: compact
 
         // Keep the outside edges flush; spacing belongs only between clocks.
@@ -106,8 +116,18 @@ PlasmoidItem {
             Kirigami.Theme.defaultFont.pixelSize * 3
         ))
 
+        // A vertical panel is narrower than long times or labels.
+        readonly property real verticalMaximumTextWidth: Plasmoid.formFactor === PlasmaCore.Types.Vertical && width > 0
+            ? width
+            : Infinity
+
         hoverEnabled: true
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: Qt.LeftButton
+
+        // Pressing the clock can dismiss the popup before the click is delivered.
+        property bool wasExpanded: false
+        onPressed: wasExpanded = root.expanded
+        onClicked: root.expanded = !wasExpanded
 
         Layout.fillHeight: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
         Layout.fillWidth: Plasmoid.formFactor === PlasmaCore.Types.Vertical
@@ -130,10 +150,6 @@ PlasmoidItem {
             ? Infinity
             : implicitHeight
 
-        Accessible.role: Accessible.StaticText
-        Accessible.name: root.clockEntries.map(entry => entry.label.length > 0 ? entry.label : entry.timeZone).join(", ")
-        Accessible.description: root.toolTipSubText
-
         GridLayout {
             id: clockGrid
 
@@ -153,9 +169,12 @@ PlasmoidItem {
                     required property int index
                     required property var modelData
 
-                    implicitWidth: Math.max(timeLabel.implicitWidth, customLabel.implicitWidth)
+                    implicitWidth: labels.implicitWidth
                     implicitHeight: labels.implicitHeight
                     Layout.fillHeight: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
+
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: customLabel.text + ", " + timeLabel.text
 
                     Clock {
                         id: clock
@@ -173,11 +192,12 @@ PlasmoidItem {
                             id: timeLabel
 
                             Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: compact.verticalMaximumTextWidth
                             Layout.minimumHeight: font.pixelSize
                             Layout.preferredHeight: font.pixelSize
                             Layout.maximumHeight: font.pixelSize
                             text: clock.valid
-                                ? Qt.locale().toString(clock.dateTime, root.timeFormat())
+                                ? Qt.locale().toString(clock.dateTime, root.timeFormat)
                                 : "--:--"
                             textFormat: Text.PlainText
                             horizontalAlignment: Text.AlignHCenter
@@ -194,12 +214,17 @@ PlasmoidItem {
                                     Math.min(Kirigami.Theme.defaultFont.pixelSize * 1.45, compact.height * 0.42)
                                 )
                             font.features: { "tnum": 1 }
+                            fontSizeMode: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+                                ? Text.HorizontalFit
+                                : Text.FixedSize
+                            minimumPixelSize: Math.round(Kirigami.Theme.smallFont.pixelSize * 0.6)
                         }
 
                         PlasmaComponents.Label {
                             id: customLabel
 
                             Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: compact.verticalMaximumTextWidth
                             Layout.minimumHeight: font.pixelSize
                             Layout.preferredHeight: font.pixelSize
                             Layout.maximumHeight: font.pixelSize
@@ -226,6 +251,40 @@ PlasmoidItem {
         }
     }
 
-    compactRepresentation: ClockView {}
-    fullRepresentation: ClockView {}
+    fullRepresentation: PlasmaCalendar.MonthView {
+        id: calendar
+
+        implicitWidth: Kirigami.Units.gridUnit * 20
+        implicitHeight: Kirigami.Units.gridUnit * 20
+        Layout.minimumWidth: implicitWidth
+        Layout.minimumHeight: implicitHeight
+        Layout.preferredWidth: implicitWidth
+        Layout.preferredHeight: implicitHeight
+
+        today: localClock.dateTime
+
+        function showToday(): void {
+            resetToToday();
+            forceActiveFocus(Qt.PopupFocusReason);
+        }
+
+        // Covers the first opening, whether or not this item already existed
+        // when the applet was expanded.
+        Component.onCompleted: showToday()
+
+        Clock {
+            id: localClock
+            // Follow the system time zone, including changes while Plasma is running.
+        }
+
+        Connections {
+            target: root
+
+            function onExpandedChanged(): void {
+                if (root.expanded) {
+                    calendar.showToday();
+                }
+            }
+        }
+    }
 }
